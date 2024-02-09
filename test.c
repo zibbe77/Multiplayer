@@ -113,15 +113,127 @@ int main()
         return 1;
     }
 
-    //-------------------------------
+    printf("Binding socket to local address...\n");
+
+    // bindes a local ip and port to a socket
+    // bind returns a 0 on succss and a non zero on fail
+    if (bind(socket_listen, bind_address->ai_addr, bind_address->ai_addrlen))
+    {
+        fprintf(stderr, "bind() failed. (%d)\n", GETSOCKETERRNO());
+        return 1;
+    }
+    // we are done with it
+    freeaddrinfo(bind_address);
+
+    printf("Listening...\n");
+
+    // First argument is the socket that we want to lisen to and the second is how many queued connections we allow.
+    // returns a 0 no success and a -1 on fail
+    if (listen(socket_listen, 10) < 0)
+    {
+        fprintf(stderr, "listen() failed. (%d)\n", GETSOCKETERRNO());
+        return 1;
+    }
+
+    printf("Waiting for connection...\n");
+
+    // https://stackoverflow.com/questions/16010622/reasoning-behind-c-sockets-sockaddr-and-sockaddr-storage
+    // its for storing but in a protocal independet way
+    struct sockaddr_storage client_address;
+
+    // By declaring specific types for these fields, it decouples them from a particular representation like unsigned int.
+    // So a guess its for storing the length
+    socklen_t client_len = sizeof(client_address);
+
+    // is used to creat a new socket for the first incoming connection from the listen()
+    // socket - specifes a socket that was created with socket() and was bind() and has issued a call to listen()
+    // address - null for no returns or a pointer to a sockaddr structure
+    // address_len - Takes the length of the adress and returns the length of the stored address
+    SOCKET socket_client = accept(
+        socket_listen,
+        (struct sockaddr *)&client_address,
+        &client_len);
+
+    if (!ISVALIDSOCKET(socket_client))
+    {
+        fprintf(stderr, "accept() failed. (%d)\n", GETSOCKETERRNO());
+        return 1;
+    }
+
+    /*time_server.c continued*/
+    printf("Client is connected... ");
+
+    // this logs the clients info in the console
+    //  IP and hostname since this is for a web server
+
+    // we need to pas in the length becuse this function works on ipv4 and ipv6
+    char address_buffer[100];
+    getnameinfo(
+        (struct sockaddr *)&client_address,
+        client_len, address_buffer,
+        sizeof(address_buffer),
+        0,
+        0,
+        NI_NUMERICHOST);
+
+    printf("%s\n", address_buffer);
+
+    printf("Reading request...\n");
+
+    char request[1024];
+
+    // First parameter is the socket
+    // Second is the buffert where the msg should get stored
+    // Third is the lenght of the buffert
+    // Lastly is flags we have non so we pas 0
+    int bytes_received = recv(socket_client, request, 1024, 0);
+    printf("Received %d bytes.\n", bytes_received);
+
+    // we are telling c to print bytes_received chars of request becuse we cant know if reqest is null termineted
+    printf("%.*s", bytes_received, request);
+
+    printf("Sending response...\n");
+    const char *response =
+        "HTTP/1.1 200 OK\r\n"
+        "Connection: close\r\n"
+        "Content-Type: text/plain\r\n\r\n"
+        "Local time is: ";
+
+    // first paremeter is what socket to use
+    // second is the buffer for the response msg
+    // third is the lenght of the response msg
+    // btw strlen givs the lenght of the string given to it. string.h
+
+    int bytes_sent = send(socket_client, response, strlen(response), 0);
+
+    printf("Sent %d of %d bytes.\n", bytes_sent, (int)strlen(response));
+
+    // gets time and saves it
     time_t timer;
     time(&timer);
-    printf("Local time is: %s", ctime(&timer));
+    char *time_msg = ctime(&timer);
+
+    // sends it but agin ???
+    // i guess it dosent mather to send all in same send()
+    bytes_sent = send(socket_client, time_msg, strlen(time_msg), 0);
+    printf("Sent %d of %d bytes.\n", bytes_sent, (int)strlen(time_msg));
+
+    // closes socket
+    // makro becuse its diffrent on windows and onix
+    CLOSESOCKET(socket_client);
+
+    // here we can accept more request but this is a exemple so we dont
+
+    printf("Closing listening socket...\n");
+    CLOSESOCKET(socket_listen);
 
 //--------------------------------
 // cleanup dependencies for win
 #if defined(_WIN32)
     WSACleanup();
 #endif
+
+    printf("Finished.\n");
+
     return 0;
 }
