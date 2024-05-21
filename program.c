@@ -6,13 +6,18 @@ typedef struct ClientConnectInfo
     char address[17];
 } ClientConnectInfo;
 
+int player1PosX = 100;
+int player1PosY = 100;
+
+int player2PosX = 100;
+int player2PosY = 100;
+
+pthread_mutex_t mutex;
+
 // Server Stuff
 //----------------------
 void *serverThreed()
 {
-    // program
-    //--------------------------------
-
     printf("Configuring local address...\n");
 
     struct addrinfo hints;
@@ -69,16 +74,33 @@ void *serverThreed()
             socklen_t client_len = sizeof(client_address);
             char read[1024];
             int bytes_received = recvfrom(socket_listen, read, 1024, 0, (struct sockaddr *)&client_address, &client_len);
-            if (bytes_received < 1)
-            {
-                fprintf(stderr, "connection closed. (%d)\n",
-                        GETSOCKETERRNO());
-                pthread_exit(NULL);
-            }
+            // if (bytes_received < 1)
+            // {
+            //     fprintf(stderr, "connection closed. (%d)\n",
+            //             GETSOCKETERRNO());
+            //     pthread_exit(NULL);
+            // }
 
-            for (int j = 0; j < bytes_received; ++j)
-                read[j] = toupper(read[j]);
-            sendto(socket_listen, read, bytes_received, 0, (struct sockaddr *)&client_address, client_len);
+            if (bytes_received >= 1)
+            {
+                pthread_mutex_lock(&mutex);
+                player1PosY |= read[0];
+                player1PosY |= read[1] >> 8;
+                player1PosX |= read[2];
+                player1PosX |= read[3] >> 8;
+
+                pthread_mutex_unlock(&mutex);
+
+                printf("Received (%d bytes): %.*s \n", bytes_received, bytes_received, read);
+                printf("x - %i y - %i \n", player1PosX, player1PosY);
+
+                // for (int j = 0; j < bytes_received; ++j)
+                // {
+                //     read[j] = toupper(read[j]);
+                // }
+
+                // sendto(socket_listen, read, bytes_received, 0, (struct sockaddr *)&client_address, client_len);
+            }
         }
     }
 
@@ -91,13 +113,6 @@ void *serverThreed()
 //----------------------
 void *clientThreed()
 {
-    // if we pass less arguents than 3 we close the program
-    // if (argc < 3)
-    // {
-    //     fprintf(stderr, "usage: tcp_client hostname port\n");
-    //     pthread_exit(NULL);
-    // }
-
     ClientConnectInfo clientInfo;
 
     for (char i = 0; i < 5; i++)
@@ -176,10 +191,10 @@ void *clientThreed()
     freeaddrinfo(peer_address);
 
     printf("Connected.\n");
-    printf("To send data, enter text followed by enter.\n");
 
     while (1)
     {
+
         // a file descriptor
         fd_set reads;
         // zeros it
@@ -221,8 +236,7 @@ void *clientThreed()
                 printf("Connection closed by peer.\n");
                 break;
             }
-            printf("Received (%d bytes): %.*s",
-                   bytes_received, bytes_received, read);
+            // printf("Received (%d bytes): %.*s", bytes_received, bytes_received, read);
         }
         // destorys {}
         //---------------------------------
@@ -239,13 +253,18 @@ void *clientThreed()
         //---------------------------------
         if (FD_ISSET(0, &reads))
         {
-            //---------------------------------
+
             char read[4096];
-            if (!fgets(read, 4096, stdin))
-            {
-                break;
-            }
-            printf("Sending: %s", read);
+
+            // printf("#player1 pos X == %i ::: player pos Y %i \n", player1PosX, player1PosY);
+
+            pthread_mutex_lock(&mutex);
+            read[0] = (player1PosY >> 0) & 0xFF;
+            read[1] = (player1PosY >> 8) & 0xFF;
+            read[2] = (player1PosX >> 0) & 0xFF;
+            read[3] = (player1PosX >> 8) & 0xFF;
+
+            pthread_mutex_unlock(&mutex);
 
             int bytes_sent = send(socket_peer, read, strlen(read), 0);
             printf("Sent %d bytes.\n", bytes_sent);
@@ -267,27 +286,75 @@ int main()
     }
 #endif
 
-    InitWindow(600, 600, "game");
+    InitWindow(1000, 1000, "game");
+    SetTargetFPS(120);
+
+    pthread_mutex_init(&mutex, NULL);
 
     pthread_t t1;
     pthread_t t2;
     pthread_create(&t1, NULL, &serverThreed, NULL);
 
-    sleep(5);
-    printf("-------------\n");
+    sleep(2);
     pthread_create(&t2, NULL, &clientThreed, NULL);
+
+    // Game logic
+    //----------------------
+    int gameState = 1;
+    int player = 0;
 
     while (!WindowShouldClose())
     {
-        // Game logic
-        //----------------------
+        switch (gameState)
+        {
+        case 1:
+            BeginDrawing();
 
-        BeginDrawing();
-        ClearBackground(BLACK);
+            ClearBackground(BLACK);
 
-        DrawCircle(100, 100, 50, RED);
+            // void DrawText(const char *text, int posX, int posY, int fontSize, Color color);
 
-        EndDrawing();
+            EndDrawing();
+
+            break;
+        case 2:
+            if (IsKeyDown(KEY_W))
+            {
+                pthread_mutex_lock(&mutex);
+                player1PosY--;
+                pthread_mutex_unlock(&mutex);
+            }
+            if (IsKeyDown(KEY_S))
+            {
+                pthread_mutex_lock(&mutex);
+                player1PosY++;
+                pthread_mutex_unlock(&mutex);
+            }
+
+            if (IsKeyDown(KEY_D))
+            {
+                pthread_mutex_lock(&mutex);
+                player1PosX++;
+                pthread_mutex_unlock(&mutex);
+            }
+            if (IsKeyDown(KEY_A))
+            {
+                pthread_mutex_lock(&mutex);
+                player1PosX--;
+                pthread_mutex_unlock(&mutex);
+            }
+
+            BeginDrawing();
+            ClearBackground(BLACK);
+
+            DrawCircle(player1PosX, player1PosY, 20, GREEN);
+
+            EndDrawing();
+            break;
+
+        default:
+            break;
+        }
     }
 
 //--------------------------------
