@@ -6,13 +6,25 @@ typedef struct ClientConnectInfo
     char address[17];
 } ClientConnectInfo;
 
+int gameState = 0;
+
+// player
+
 int player1PosX = 100;
 int player1PosY = 100;
 
 int player2PosX = 100;
 int player2PosY = 100;
 
+int player = 0;
+
 pthread_mutex_t mutex;
+
+// Connection variables
+
+char *serverPort = "8080";
+char *serverAdress = "127.0.0.1";
+char *clientConnectPort = "8000";
 
 // Server Stuff
 //----------------------
@@ -28,7 +40,7 @@ void *serverThreed()
     hints.ai_flags = AI_PASSIVE;
 
     struct addrinfo *bind_address;
-    getaddrinfo(0, "8080", &hints, &bind_address);
+    getaddrinfo(0, serverPort, &hints, &bind_address);
 
     printf("Creating socket...\n");
     SOCKET socket_listen = socket(
@@ -84,15 +96,23 @@ void *serverThreed()
             if (bytes_received >= 1)
             {
                 pthread_mutex_lock(&mutex);
-                player1PosY |= read[0];
-                player1PosY |= read[1] >> 8;
-                player1PosX |= read[2];
-                player1PosX |= read[3] >> 8;
+                switch (player)
+                {
+                case 1:
+                    player2PosY = *((int *)&read[8]);
+                    player2PosX = *((int *)&read[12]);
+                    break;
+                case 2:
+                    player1PosY = *((int *)&read[0]);
+                    player1PosX = *((int *)&read[4]);
+                    break;
+                }
 
                 pthread_mutex_unlock(&mutex);
 
-                printf("Received (%d bytes): %.*s \n", bytes_received, bytes_received, read);
+                // printf("Received (%d bytes): %.*s \n", bytes_received, bytes_received, read);
                 printf("x - %i y - %i \n", player1PosX, player1PosY);
+                // printf("x - %i y - %i \n", player2PosX, player2PosY);
 
                 // for (int j = 0; j < bytes_received; ++j)
                 // {
@@ -117,11 +137,11 @@ void *clientThreed()
 
     for (char i = 0; i < 5; i++)
     {
-        clientInfo.port[i] = "8080"[i];
+        clientInfo.port[i] = clientConnectPort[i];
     }
     for (char i = 0; i < 17; i++)
     {
-        clientInfo.address[i] = "127.0.0.1"[i];
+        clientInfo.address[i] = serverAdress[i];
     }
 
     printf("Configuring remote address...\n");
@@ -224,51 +244,18 @@ void *clientThreed()
             fprintf(stderr, "select() failed. (%d)\n", GETSOCKETERRNO());
             pthread_exit(NULL);
         }
+        char read[4096];
 
-        // this makro returns true if the first parameter is a file descriptor that is set
-        if (FD_ISSET(socket_peer, &reads))
-        {
-            char read[4096];
-            // reads the msg form the socket
-            int bytes_received = recv(socket_peer, read, 4096, 0);
-            if (bytes_received < 1)
-            {
-                printf("Connection closed by peer.\n");
-                break;
-            }
-            // printf("Received (%d bytes): %.*s", bytes_received, bytes_received, read);
-        }
-        // destorys {}
-        //---------------------------------
+        pthread_mutex_lock(&mutex);
+        *((int *)&read[0]) = player1PosY;
+        *((int *)&read[4]) = player1PosX;
+        *((int *)&read[8]) = player2PosY;
+        *((int *)&read[12]) = player2PosX;
 
-        // #if defined(_WIN32)
-        //         if (_kbhit())
-        //         {
-        // #else
-        //         if (FD_ISSET(0, &reads))
-        //         {
-        // #endif
+        pthread_mutex_unlock(&mutex);
 
-        // replace this with the over
-        //---------------------------------
-        if (FD_ISSET(0, &reads))
-        {
-
-            char read[4096];
-
-            // printf("#player1 pos X == %i ::: player pos Y %i \n", player1PosX, player1PosY);
-
-            pthread_mutex_lock(&mutex);
-            read[0] = (player1PosY >> 0) & 0xFF;
-            read[1] = (player1PosY >> 8) & 0xFF;
-            read[2] = (player1PosX >> 0) & 0xFF;
-            read[3] = (player1PosX >> 8) & 0xFF;
-
-            pthread_mutex_unlock(&mutex);
-
-            int bytes_sent = send(socket_peer, read, strlen(read), 0);
-            printf("Sent %d bytes.\n", bytes_sent);
-        }
+        int bytes_sent = send(socket_peer, read, 16, 0);
+        // printf("Sent %d bytes.\n", bytes_sent);
     }
     printf("Closing socket...\n");
     CLOSESOCKET(socket_peer);
@@ -293,61 +280,136 @@ int main()
 
     pthread_t t1;
     pthread_t t2;
-    pthread_create(&t1, NULL, &serverThreed, NULL);
-
-    sleep(2);
-    pthread_create(&t2, NULL, &clientThreed, NULL);
-
-    // Game logic
-    //----------------------
-    int gameState = 1;
-    int player = 0;
 
     while (!WindowShouldClose())
     {
         switch (gameState)
         {
+        case 0:
+            if (IsKeyDown(KEY_G))
+            {
+                gameState = 1;
+                player = 1;
+                serverPort = "8080";
+                clientConnectPort = "8000";
+                pthread_create(&t1, NULL, &serverThreed, NULL);
+            }
+            if (IsKeyDown(KEY_H))
+            {
+                gameState = 1;
+                player = 2;
+                serverPort = "8000";
+                clientConnectPort = "8080";
+                pthread_create(&t1, NULL, &serverThreed, NULL);
+            }
+
+            // Draw
+            BeginDrawing();
+
+            DrawText("Press G for player 1 and H for player 2", 200, 200, 20, GREEN);
+
+            EndDrawing();
+
+            break;
         case 1:
+
+            if (IsKeyDown(KEY_T))
+            {
+                switch (player)
+                {
+                case 1:
+                    serverAdress = "127.0.0.1";
+                    pthread_create(&t2, NULL, &clientThreed, NULL);
+                    gameState = 2;
+                    break;
+                case 2:
+                    // Change server adress here
+                    serverAdress = "127.0.0.1";
+                    pthread_create(&t2, NULL, &clientThreed, NULL);
+                    gameState = 2;
+                    break;
+                }
+            }
             BeginDrawing();
 
             ClearBackground(BLACK);
+            switch (player)
+            {
+            case 1:
+                DrawText("Player 1", 200, 100, 20, WHITE);
+                break;
+            case 2:
+                DrawText("Player 2", 200, 100, 20, WHITE);
+                break;
+            }
 
-            // void DrawText(const char *text, int posX, int posY, int fontSize, Color color);
+            DrawText("Press T to start", 200, 300, 20, GREEN);
 
             EndDrawing();
 
             break;
         case 2:
-            if (IsKeyDown(KEY_W))
+            switch (player)
             {
-                pthread_mutex_lock(&mutex);
-                player1PosY--;
-                pthread_mutex_unlock(&mutex);
-            }
-            if (IsKeyDown(KEY_S))
-            {
-                pthread_mutex_lock(&mutex);
-                player1PosY++;
-                pthread_mutex_unlock(&mutex);
-            }
-
-            if (IsKeyDown(KEY_D))
-            {
-                pthread_mutex_lock(&mutex);
-                player1PosX++;
-                pthread_mutex_unlock(&mutex);
-            }
-            if (IsKeyDown(KEY_A))
-            {
-                pthread_mutex_lock(&mutex);
-                player1PosX--;
-                pthread_mutex_unlock(&mutex);
+            case 1:
+                if (IsKeyDown(KEY_W))
+                {
+                    pthread_mutex_lock(&mutex);
+                    player1PosY--;
+                    pthread_mutex_unlock(&mutex);
+                }
+                if (IsKeyDown(KEY_S))
+                {
+                    pthread_mutex_lock(&mutex);
+                    player1PosY++;
+                    pthread_mutex_unlock(&mutex);
+                }
+                if (IsKeyDown(KEY_D))
+                {
+                    pthread_mutex_lock(&mutex);
+                    player1PosX++;
+                    pthread_mutex_unlock(&mutex);
+                }
+                if (IsKeyDown(KEY_A))
+                {
+                    pthread_mutex_lock(&mutex);
+                    player1PosX--;
+                    pthread_mutex_unlock(&mutex);
+                }
+                break;
+            case 2:
+                if (IsKeyDown(KEY_I))
+                {
+                    pthread_mutex_lock(&mutex);
+                    player2PosY--;
+                    pthread_mutex_unlock(&mutex);
+                }
+                if (IsKeyDown(KEY_K))
+                {
+                    pthread_mutex_lock(&mutex);
+                    player2PosY++;
+                    pthread_mutex_unlock(&mutex);
+                }
+                if (IsKeyDown(KEY_L))
+                {
+                    pthread_mutex_lock(&mutex);
+                    player2PosX++;
+                    pthread_mutex_unlock(&mutex);
+                }
+                if (IsKeyDown(KEY_J))
+                {
+                    pthread_mutex_lock(&mutex);
+                    player2PosX--;
+                    pthread_mutex_unlock(&mutex);
+                }
+                break;
             }
 
             BeginDrawing();
             ClearBackground(BLACK);
 
-            DrawCircle(player1PosX, player1PosY, 20, GREEN);
+            DrawCircle(player1PosX, player1PosY, 20, BLUE);
+            DrawCircle(player2PosX, player2PosY, 20, RED);
 
             EndDrawing();
             break;
