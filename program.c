@@ -86,12 +86,6 @@ void *serverThreed()
             socklen_t client_len = sizeof(client_address);
             char read[1024];
             int bytes_received = recvfrom(socket_listen, read, 1024, 0, (struct sockaddr *)&client_address, &client_len);
-            // if (bytes_received < 1)
-            // {
-            //     fprintf(stderr, "connection closed. (%d)\n",
-            //             GETSOCKETERRNO());
-            //     pthread_exit(NULL);
-            // }
 
             if (bytes_received >= 1)
             {
@@ -109,17 +103,6 @@ void *serverThreed()
                 }
 
                 pthread_mutex_unlock(&mutex);
-
-                // printf("Received (%d bytes): %.*s \n", bytes_received, bytes_received, read);
-                printf("x - %i y - %i \n", player1PosX, player1PosY);
-                // printf("x - %i y - %i \n", player2PosX, player2PosY);
-
-                // for (int j = 0; j < bytes_received; ++j)
-                // {
-                //     read[j] = toupper(read[j]);
-                // }
-
-                // sendto(socket_listen, read, bytes_received, 0, (struct sockaddr *)&client_address, client_len);
             }
         }
     }
@@ -255,7 +238,6 @@ void *clientThreed()
         pthread_mutex_unlock(&mutex);
 
         int bytes_sent = send(socket_peer, read, 16, 0);
-        // printf("Sent %d bytes.\n", bytes_sent);
     }
     printf("Closing socket...\n");
     CLOSESOCKET(socket_peer);
@@ -318,7 +300,7 @@ int main()
                 switch (player)
                 {
                 case 1:
-                    serverAdress = "127.0.0.1";
+                    serverAdress = "10.156.8.109";
                     pthread_create(&t2, NULL, &clientThreed, NULL);
                     gameState = 2;
                     break;
