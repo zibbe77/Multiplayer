@@ -155,7 +155,6 @@ int main(int argc, char *argv[])
                             // send can be blockt than it returns with the remaining bytes to send
                         }
                     }
-                    //-----------------
                 }
             }
         }

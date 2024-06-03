@@ -3,6 +3,8 @@
         "pthread.h": "c",
         "stdio.h": "c",
         "program.h": "c",
-        "__mutex_base": "c"
+        "__mutex_base": "c",
+        "ctype.h": "c",
+        "network.h": "c"
     }
 }

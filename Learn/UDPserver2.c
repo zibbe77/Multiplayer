@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
     hints.ai_flags = AI_PASSIVE;
 
     struct addrinfo *bind_address;
-    getaddrinfo(0, "8080", &hints, &bind_address);
+    getaddrinfo(0, "8999", &hints, &bind_address);
 
     printf("Creating socket...\n");
     SOCKET socket_listen = socket(
@@ -79,8 +79,15 @@ int main(int argc, char *argv[])
                 return 1;
             }
 
+            printf("hello \n");
+
+            printf("Received (%d bytes): %.*s",
+                   bytes_received, bytes_received, read);
+
             for (int j = 0; j < bytes_received; ++j)
+            {
                 read[j] = toupper(read[j]);
+            }
             sendto(socket_listen, read, bytes_received, 0, (struct sockaddr *)&client_address, client_len);
         }
     }
